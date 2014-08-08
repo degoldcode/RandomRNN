@@ -13,13 +13,13 @@
 using namespace std;
 using namespace arma;
 
-const int trainLen = 5000;				// time interval for training (in ts)
+const int trainLen = 25000;				// time interval for training (in ts)
 const int testLen = 5000;				// time interval for testing (in ts)
 const int initLen = 100;				// time interval for initiating (in ts)
 
 const int inSize = 1; 					// Number of input neurons (input dim)
 const int outSize = 1;					// Number of input neurons (input dim)
-const int resSize = 1000;				// Number of reservoir neurons (resSize = 0.8*Ne + 0.2*Ni)
+const int resSize = 400;				// Number of reservoir neurons (resSize = 0.8*Ne + 0.2*Ni)
 const double a = 1.0; 					// leaking rate
 const double sR = 1.0;					// spectral radius
 

@@ -13,9 +13,9 @@ SORN::SORN(int mN, double des_sR){
 	arma_rng::set_seed_random();
 	printf("\nASSEMBLE A SELF-ORGANIZING RECURRENT NETWORK\n\n");
 
-	N = mN;
-	Ne = int(0.8*N);
-	Ni = int(0.2*N);
+	Ne = mN;
+	Ni = int(0.2*Ne);
+	N = Ne+Ni;
 	Nu = 10;
 
 	w_sp = 10./Ne;

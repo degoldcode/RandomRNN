@@ -5,8 +5,8 @@ set terminal postscript enhanced color eps "Helvetica, 12" size 5,1
 set offsets graph 0, 0, 0.05, 0.05
 
 ## Ranges
-set xrange [-0.5:4999.5]
-set yrange [-0.5:799.5]
+set xrange [-0.5:24999.5]
+set yrange [-0.5:399.5]
 set cbrange [0.:1.]
 
 ## Tics
