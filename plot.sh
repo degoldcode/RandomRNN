@@ -1,0 +1,2 @@
+cd plotscr
+gnuplot *.plot
