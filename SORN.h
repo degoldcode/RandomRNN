@@ -28,7 +28,7 @@ public:
 
 	vec x;						// state of reservoir excitatory units
 	vec R;						// recurrent drive
-	vec xp;						// pseudo-state of reservoir excitatory units (no input drive)
+	vec xp;		// pseudo-state of reservoir excitatory units (no input drive)
 	vec y;						// state of reservoir inhibitory units
 	vec the;					// excitatory thresholds
 	vec thi;					// inhibitory thresholds
@@ -48,11 +48,10 @@ public:
 	mat delta_W;				// changes of reservoir weights
 	uvec idx_W;					// indices of positive weights
 
-
 	int N;						// total number of reservoir units
 	int Ne;						// number of reservoir excitatory units (0.8*N)
 	int Ni;						// number of reservoir inhibitory units (0.2*N)
-	int Nu;						// number of reservoir units directly driven by one of the inputs
+	int Nu;	// number of reservoir units directly driven by one of the inputs
 
 	double w_sp;				// sparseness of reservoir weight matrix
 	//double w_sR;				// spectral radius of reservoir weight matrix
@@ -66,7 +65,5 @@ public:
 	bool SN;
 	bool IP;
 };
-
-
 
 #endif /* SORN_H_ */
