@@ -5,13 +5,13 @@ set size square
 set offsets graph 0, 0, 0.1, 0.1
 
 ## Ranges
-set xrange [-0.5:199.5]
-set yrange [-0.5:199.5]
+set xrange [-0.5:999.5]
+set yrange [-0.5:999.5]
 #set cbrange [0.:1.]
 
 ## Tics
-set xtics 50
-set ytics 50
+set xtics 100
+set ytics 100
 set cbtics 0.2
 
 ## Labels
