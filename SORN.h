@@ -11,17 +11,19 @@
 #include <armadillo>
 #include <string>
 #include <sstream>
+#include "timer.h"
 using namespace std;
 using namespace arma;
 
 class SORN {
 public:
-	SORN(int mN, double des_sR);
+	SORN(int mN, double leak);
 	~SORN();
 
 	double max_eigenval(mat & in);
 	mat max_of(mat A, mat B);
 	mat min_of(mat A, mat B);
+	mat normalize(mat in);
 	void save_matrices(string mode);
 	void set_input_con(mat in);
 	void set_matrix(int time);
@@ -60,7 +62,7 @@ public:
 	int No;				// number of readout units
 
 	double w_sp;		// sparseness of reservoir weight matrix
-	//double w_sR;		// spectral radius of reservoir weight matrix
+	double w_sR;		// spectral radius of reservoir weight matrix
 
 	double leak_rate;	// leaking rate (1 => "nothing is leaking")
 
@@ -71,6 +73,9 @@ public:
 	bool SN;			// Boolean (if STDP is on)
 	bool IP;			// Boolean (if STDP is on)
 	int T_mat;			// maximum time interval saved in matrices
+	int sampling_rate;	// for matrices
+
+	Timer * test_timer;
 };
 
 #endif /* SORN_H_ */

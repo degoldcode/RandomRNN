@@ -20,15 +20,17 @@
  * RETURN:	class object of SORN
  *
  */
-SORN::SORN(int mN, double des_sR){
+SORN::SORN(int mN, double leak){
 	arma_rng::set_seed_random();
 	printf("\nASSEMBLE A SELF-ORGANIZING RECURRENT NETWORK WITH %u EXCITATORY UNITS\n\n", mN);
+
+	#include "network.conf"
 
 	//Number of units
 	Ne = mN;
 	Ni = int(0.2*Ne);
 	N = Ne+Ni;
-	Nu = 100;
+	Nu = 20;//int(0.05*Ne);
 
 	//Random initial weights
 	w_sp = 10./Ne;
@@ -37,22 +39,22 @@ SORN::SORN(int mN, double des_sR){
 	W = w_mat;
 	Wie = randu<mat>(Ni, Ne);
 	Wei = randu<mat>(Ne, Ni);
-	//W.diag() = zeros<vec>(W.n_rows);
-	//Wie.diag() = zeros<vec>(Wie.n_rows);
-	//Wei.diag() = zeros<vec>(Wei.n_cols);
+	W.diag() = zeros<vec>(W.n_rows);
+	Wie.diag() = zeros<vec>(Wie.n_rows);
+	Wei.diag() = zeros<vec>(Wei.n_cols);
 	//printf("Diagonale has norm: %f (EE), %f (IE), %f (EI)\n", norm(W.diag()), norm(Wie.diag()), norm(Wei.diag()));
 	printf("Done.\n\n");
 	printf("Index actual connections (W(i,j) > 0.)...\n");
 	idx_W = find(W>0);
 	printf("Found %u connections.\n", idx_W.n_elem);
-	printf("Average degree per unit = %f .\n\n", double(idx_W.n_elem/Ne));
+	printf("Average degree per unit = %f .\n\n", 1.0*idx_W.n_elem/Ne);
 	//printf("Computing spectral radius...\n");
 	//w_sR = max_eigenval(W);
 	//printf("sR = %4.3f\n", w_sR);
 	printf("Normalize weights row-wise...\n");
-	W = normalise(W,2,1);
-	Wei = normalise(Wei,2,1);
-	Wie = normalise(Wie,2,1);
+	W = normalize(W);
+	Wei = normalize(Wei);
+	Wie = normalize(Wie);
 	// Save initial weight matrix
 	init_W = W;
 	init_W.save("./results/init_W.mat", raw_ascii);
@@ -62,7 +64,7 @@ SORN::SORN(int mN, double des_sR){
 
 	//Random initial states
 	printf("Initialize states & thresholds...\n");
-	leak_rate = 1.;
+	leak_rate = leak;
 	x.randu(Ne);
 	y.randu(Ni);
 	xp.randu(Ne);
@@ -75,7 +77,7 @@ SORN::SORN(int mN, double des_sR){
 
 	printf("Initialize learning parameters...\n");
 
-	double tr = 2.*(1.*Nu)/(1.*Ne);
+	double tr = 0.1;//2.*(1.*Nu)/(1.*Ne);
 	target_rate = tr*ones<vec>(Ne);//(2.*Nu/Ne)*ones<vec>(Ne);
 	mu_IP = 0.001;//0.5;
 	mu_STDP = 0.001;
@@ -84,7 +86,8 @@ SORN::SORN(int mN, double des_sR){
 	STDP = true;
 	SN = true;
 	IP = true;
-	T_mat = 25000;
+	sampling_rate = 1;
+	T_mat = int(25000/sampling_rate);
 
 	printf("Done.\n\n");
 }
@@ -176,6 +179,18 @@ mat SORN::min_of(mat A, mat B){
 }
 
 
+mat SORN::normalize(mat in){
+	double sum;
+	for(int i = 0; i < in.n_rows; i++){
+		sum = 0.0;
+		for(int j = 0; j < in.n_cols; j++)
+			sum += in(i,j);
+		in.row(i) /= sum;
+	}
+	return in;
+}
+
+
 /*
  *
  * Saves state history matrices of reservoir states, pseudostates, and their difference.
@@ -193,11 +208,11 @@ void SORN::save_matrices(string mode){
 	ss.clear();
 	ss << "./results/res_pst_" << mode << ".mat";
 	Hp.save(ss.str().c_str(), raw_ascii);
-	dH = H-Hp;
-	ss.str( string() );
-	ss.clear();
-	ss << "./results/res_dst_" << mode << ".mat";
-	dH.save(ss.str().c_str(), raw_ascii);
+	//dH = H-Hp;
+	//ss.str( string() );
+	//ss.clear();
+	//ss << "./results/res_dst_" << mode << ".mat";
+	//dH.save(ss.str().c_str(), raw_ascii);
 }
 
 
@@ -214,7 +229,7 @@ void SORN::save_matrices(string mode){
 void SORN::set_input_con(mat in){
 	double input_conn = (1.0*Nu)/(1.*Ne*in.n_rows);
 	if(Nu < in.n_rows)
-		printf("!!! Warning: Not every input dimension is connected to the reservoir.\n\n");
+		printf("!!! Warning: Not every input dimension is connected to the reservoir.\n");
 	if(input_conn > 0.5)
 		printf("!!! Warning: Reservoir is too input-driven. Increase reservoir size for respective input dimension.\n\n");
 	printf("Set up input connections to the reservoir with connectivity = %f\n\n", input_conn);
@@ -228,7 +243,8 @@ void SORN::set_input_con(mat in){
 		else
 			Wu(rand_idx(idx_col), idx_col%in.n_rows) = 1.0;
 	}
-	printf("Reservoir units driven by input = %u\n\n", int(accu(Wu)));
+	printf("Reservoir units driven by input = %u\n", int(accu(Wu)));
+	printf("Done.\n\n");
 }
 
 
@@ -243,6 +259,7 @@ void SORN::set_input_con(mat in){
  *
  */
 void SORN::set_matrix(int time){
+	printf("Set state history matrices...\n");
 	if(time < T_mat){
 		H.zeros(Ne, time);
 		Hp.zeros(Ne, time);
@@ -251,6 +268,7 @@ void SORN::set_matrix(int time){
 		H.zeros(Ne, T_mat);
 		Hp.zeros(Ne, T_mat);
 	}
+	printf("Done.\n\n");
 }
 
 
@@ -269,24 +287,30 @@ void SORN::train(mat data, int time){
 	SN = true;
 	IP = true;
 	printf("START TRAINING PHASE FOR %u TIMESTEPS\nSTDP = %s\nSN = %s\nIP = %s\n\n", time, STDP ? "ON" : "OFF", SN ? "ON" : "OFF", IP ? "ON" : "OFF");
-
+	printf("Input dim: %u x %u\n\n", data.n_rows, data.n_cols);
 	set_input_con(data);
 	set_matrix(time);
 
 	for(int t = 0; t < time; t++){
-		if(t%T_mat==0)
+		if(t%T_mat==0 && t != 0)
 			save_matrices("train");
-		H.col(t%T_mat) = x;
-		Hp.col(t%T_mat) = xp;
-
+		if(t%sampling_rate==0){
+			H.col(t%T_mat) = x;
+			//Hp.col(t%T_mat) = xp;
+//		if(t%1000==0){
+//			printf("Computing spectral radius...\n");
+//			w_sR = max_eigenval(W);
+//			printf("sR = %4.3f\n", w_sR);
+//		}
+		}
 		mat dW = -W;
 		update(data.col(t%data.n_cols));
 		dW += W;
 		mean_dw += accu(abs(dW))/dW.n_elem;
 
 
-		if(t%5000==0)
-			printf("%6u ts: <dw> = %f\n", t, mean_dw/t);
+		if(t%1000==0)
+			printf("%6u ts: <dw> = %e, Input = %3.6f, X = %3.6f, W = %3.6f\n", t, mean_dw/t, accu(Wu*data.col(t%data.n_cols))/Wu.n_rows, accu(x)/x.n_elem, accu(W)/W.n_elem);
 		if(t==time-1 && t%T_mat>100)
 			save_matrices("train");
 	}
@@ -315,35 +339,37 @@ mat SORN::test(mat data, mat teacher, int time, bool trainOut){
 	IP = false;
 	printf("START TESTING PHASE FOR %u TIMESTEPS\n\n", time);
 
-	//set_input_con(data);
+	if(trainOut)
+		set_input_con(data);
 	set_matrix(time);
 
 	for(int t = 0; t < time; t++){			// test run
-		H.col(t) = x;
-		Hp.col(t) = xp;
+		H.col(t%T_mat) = x;
+		Hp.col(t%T_mat) = xp;
 		update(data.col(t%data.n_cols));
-		if(t%1000==0)
-			printf("%6u ts.\n", t);
+		if(t%1000==0){
+			printf("%6u ts: Input = %3.6f, X = %3.6f, W = %3.6f\n", t, accu(Wu*data.col(t%data.n_cols))/Wu.n_rows, accu(x)/x.n_elem, accu(W)/W.n_elem);
+		}
 	}
 	save_matrices("test");
 	No = data.n_rows;
-	Wout.zeros(Ne, No);
 
 	if(trainOut){
-		//	Resize state history to match teacher data (cropping the first time steps -> initLen in main.cpp)
+		Wout.zeros(No, Ne);
 		mat shortHp = Hp;
 		mat shortH = H;
-		shortHp.resize(Hp.n_rows, teacher.n_cols);
+		//	Resize state history to match teacher data (cropping the first time steps -> initLen in main.cpp)
+		if((Hp.n_cols - teacher.n_cols) > 0)
+			shortHp.shed_cols(0, Hp.n_cols - teacher.n_cols);
 		if(accu(abs(teacher)) != 0.0){
 			Wout = teacher * pinv(shortHp);												// direct method: Pseudo-inverse
 			//Wout = teacher * H.t() * pinv(H*H.t());									// normal functions
 			//alpha = 0.7;																// regularization factor
 			//Wout = teacher * H.t() * pinv(H*H.t() + alpha*alpha*ones<mat>(Ne,Ne));	// Tikhonov regularization
 		}
+		mat A = (Wout*shortHp)-teacher;
+		A.save("./results/dout.mat", raw_ascii);
 	}
-
-	mat A = (Wout*shortHp)-teacher;
-	A.save("./results/dout.mat", raw_ascii);
 	return Wout*H;
 }
 
@@ -391,7 +417,7 @@ void SORN::update(vec in){
 
 		if(SN){
 			//printf("---Norm\n");
-			W = normalise(W,2,1);				// synaptic normalization
+			W = normalize(W);				// synaptic normalization
 		}
     }
 }

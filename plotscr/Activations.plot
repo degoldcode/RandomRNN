@@ -10,8 +10,8 @@ set yrange [-0.5:599.5]
 set cbrange [0.:1.]
 
 ## Tics
-set xtics 5000
-set ytics 200
+set xtics 2000
+set ytics 100
 set cbtics 1.
 
 ## Labels
@@ -21,31 +21,28 @@ set cblabel "State"
 
 #set pal gray
 ##### Reservoir activations
-
+rows = "`cat ../results/res_st_train.mat | wc -l`"
+columns = "`head ../results/res_st_train.mat -n1 | wc -w`"
+set xrange [-0.5:columns+0.5]
+set yrange [-0.5:rows+0.5]
 set output "../plots/res_st_train.eps"
 plot "../results/res_st_train.mat" matrix with image
 
-set output "../plots/res_pst_train.eps"
-plot "../results/res_pst_train.mat" matrix with image
-
-set output "../plots/res_dst_train.eps"
-plot "../results/res_dst_train.mat" matrix with image
-
-set xrange [-0.5:4999.5]
+rows = "`cat ../results/res_st_test.mat | wc -l`"
+columns = "`head ../results/res_st_test.mat -n1 | wc -w`"
+set xrange [-0.5:columns+0.5]
+set yrange [-0.5:rows+0.5]
 set output "../plots/res_st_test.eps"
 plot "../results/res_st_test.mat" matrix with image
 
 set output "../plots/res_pst_test.eps"
 plot "../results/res_pst_test.mat" matrix with image
 
-set output "../plots/res_dst_test.eps"
-plot "../results/res_dst_test.mat" matrix with image
-
-set xtics 1000
-set ytics 20
-set xrange [-0.5:4999.5]
-set yrange [-0.5:99.5]
-
+rows = "`cat ../results/my_out.mat | wc -l`"
+columns = "`head ../results/my_out.mat -n1 | wc -w`"
+set xrange [-0.5:columns-0.5]
+set yrange [-0.5:rows-0.5]
+set ytics 2
 ## Labels
 set xlabel "Time {/Helvetica-Oblique t} [ts]"
 set ylabel "Unit index"
@@ -53,11 +50,15 @@ set cblabel "State"
 
 set output "../plots/input.eps"
 plot "../results/my_data.mat" matrix with image
+set output "../plots/inputtest.eps"
+plot "../results/my_data_test.mat" matrix with image
 set output "../plots/output.eps"
 plot "../results/my_out.mat" matrix with image
-set cbrange [-1.:1.]
+set output "../plots/outputtest.eps"
+plot "../results/my_out_test.mat" matrix with image
+set cbrange []
+set xtics out
+set palette gray negative
+set xtics 250,500,5500
 set output "../plots/dout.eps"
 plot "../results/dout.mat" matrix with image
-set cbrange [0.:1.]
-#set output "../plots/inputdata.eps"
-#plot "../input/inputtrain.mat" matrix with image
