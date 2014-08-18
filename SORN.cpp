@@ -30,7 +30,7 @@ SORN::SORN(int mN, double leak){
 	Ne = mN;
 	Ni = int(0.2*Ne);
 	N = Ne+Ni;
-	Nu = 20;//int(0.05*Ne);
+	Nu = 100;//int(0.05*Ne);
 
 	//Random initial weights
 	w_sp = 10./Ne;
@@ -227,6 +227,7 @@ void SORN::save_matrices(string mode){
  *
  */
 void SORN::set_input_con(mat in){
+	Nu = in.n_rows;
 	double input_conn = (1.0*Nu)/(1.*Ne*in.n_rows);
 	if(Nu < in.n_rows)
 		printf("!!! Warning: Not every input dimension is connected to the reservoir.\n");
@@ -352,7 +353,7 @@ mat SORN::test(mat data, mat teacher, int time, bool trainOut){
 		}
 	}
 	save_matrices("test");
-	No = data.n_rows;
+	No = teacher.n_rows;
 
 	if(trainOut){
 		Wout.zeros(No, Ne);
@@ -360,14 +361,15 @@ mat SORN::test(mat data, mat teacher, int time, bool trainOut){
 		mat shortH = H;
 		//	Resize state history to match teacher data (cropping the first time steps -> initLen in main.cpp)
 		if((Hp.n_cols - teacher.n_cols) > 0)
-			shortHp.shed_cols(0, Hp.n_cols - teacher.n_cols);
+			shortHp.shed_cols(0, Hp.n_cols - teacher.n_cols - 1);
 		if(accu(abs(teacher)) != 0.0){
 			Wout = teacher * pinv(shortHp);												// direct method: Pseudo-inverse
 			//Wout = teacher * H.t() * pinv(H*H.t());									// normal functions
 			//alpha = 0.7;																// regularization factor
 			//Wout = teacher * H.t() * pinv(H*H.t() + alpha*alpha*ones<mat>(Ne,Ne));	// Tikhonov regularization
 		}
-		mat A = (Wout*shortHp)-teacher;
+		mat sub = (Wout*shortHp);
+		mat A = sub-teacher;
 		A.save("./results/dout.mat", raw_ascii);
 	}
 	return Wout*H;

@@ -17,7 +17,9 @@ using namespace arma;
 const int trainLen = 22000;				// time interval for training (in ts)
 const int testLen = 5500;				// time interval for testing (in ts)
 const int initLen = 0;					// time interval for initiating (in ts)
-const int missingLen = 50;				// time interval of missing data (in ts)
+const int missingLen = 15;				// time interval of missing data (in ts)
+const int numGestures = 11;				// number of gestures
+const int gesture_len = 500;			// time length of each gesture
 
 const int inSize = 100; 				// Number of input neurons (input dim)
 const int outSize = 100;				// Number of input neurons (input dim)
@@ -25,8 +27,11 @@ const int resSize = 500;				// Number of reservoir neurons (resSize = 0.8*Ne + 0
 const double a = 1.0; 					// leaking rate
 
 SORN * my_sorn;
-mat my_data;
-mat my_data_test;
+cube data_cube;							// cube holding data for each gesture
+mat noisa;								// noise data
+mat my_data;							// input for training
+mat my_data_test;						// input for testing
+mat my_teacher;							// teacher for readout training
 mat my_output;
 mat my_output_test;
 
@@ -37,7 +42,14 @@ void load_data(string file){
 	// load input data
 	my_data.load(file.c_str(), raw_ascii);
 	// transpose
-	my_data = my_data.t();
+	//my_data = my_data.t();
+	// load gesture cube
+	data_cube.zeros(my_data.n_rows, gesture_len, numGestures);
+	for(int i = 0; i < numGestures; i++)
+		data_cube.slice(i) = my_data.cols(i*500, i*500+499);
+	//my_data = join_rows(data_cube.slice(0),data_cube.slice(1));
+	//my_data = join_rows(my_data,data_cube.slice(4));
+	//my_data.resize(10,500);										//only first gesture
 	// repeat gestures, so it has testLen-initLen cols
 	my_data = repmat(my_data, 1, (testLen-initLen)/my_data.n_cols);
 	printf("Input dim: %u x %u\n\n", my_data.n_rows, my_data.n_cols);
@@ -45,12 +57,10 @@ void load_data(string file){
 	my_data.save("./results/my_data.mat", raw_ascii);
 }
 
-void load_test_data(int missingts, bool opt_randnoise){
+void load_test_data(int missingts, bool opt_randnoise, bool just_last){
 	my_data_test = my_data;
 	// time step, where it starts insert errors
 	int insertionts = 250;
-	// time length of one gesture
-	int gesture_len = 500;
 	// number of gestures in data
 	int num_gestures = my_data_test.n_cols/gesture_len;
 	// matrix to insert
@@ -58,13 +68,27 @@ void load_test_data(int missingts, bool opt_randnoise){
 	if(opt_randnoise)
 		insert = randu<mat>(my_data_test.n_rows, missingts);
 	else
-		insert = zeros<mat>(my_data_test.n_rows,missingts);
-	for(int i = 0; i < num_gestures; i++){
-		int idx_start = i*gesture_len+insertionts;
-		my_data_test.cols(idx_start, idx_start + missingts-1) = insert;
+		insert = zeros<mat>(my_data_test.n_rows, missingts);
+	if(!just_last){
+		for(int i = 0; i < num_gestures; i++){
+			int idx_start = i*gesture_len+insertionts;
+			my_data_test.cols(idx_start, idx_start + missingts-1) = insert;
+		}
 	}
+	else{
+		insert = zeros<mat>(my_data_test.n_rows,missingts);
+		my_data_test.cols(my_data_test.n_cols-missingts, my_data_test.n_cols-1) = insert;
+	}
+
 	// save test input data
 	my_data_test.save("./results/my_data_test.mat", raw_ascii);
+}
+
+void load_teacher(mat in, int numgestures, int len){
+	my_teacher.zeros(numgestures, in.n_cols);
+	for(int i = 0; i < in.n_cols; i++)
+		my_teacher((i/500)%numgestures, i) = 1.0;
+	my_teacher.save("./results/my_teacher.mat", raw_ascii);
 }
 
 int main(){
@@ -75,9 +99,12 @@ int main(){
 	my_sorn = new SORN(resSize, a);
 
 	// loading input
-	load_data("./input/Input10d.txt");
+	load_data("./input/inputtrain.mat");
+	noisa.randu(my_data.n_rows, trainLen);
 	// loading input w/ missing time steps
-	load_test_data(missingLen/*ts*/,false/*true=RANDOM NOISE; false=ZEROS*/);
+	load_test_data(missingLen/*ts*/, false/*true=RANDOM NOISE; false=ZEROS*/, true);
+	// loading teacher data
+	load_teacher(my_data, 3, testLen);
 
 	// plastic network
 	my_sorn->train(my_data, trainLen);
