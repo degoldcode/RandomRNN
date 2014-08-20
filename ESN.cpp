@@ -1,60 +1,52 @@
 /*
- * SORN.cpp
+ * ESN.cpp
  *
- *  Created on: Aug 6, 2014
+ *  Created on: Aug 20, 2014
  *      Author: degoldschmidt
  */
 
-#include <cstdlib>
-#include <cstdio>
-#include "SORN.h"
 
+#include "ESN.h"
 
 /*
  *
- * Constructor of the SORN class. Creates a random graph of excitatory and inhibitory units.
+ * Constructor of the ESN class. Creates a random graph of reservoir units.
  *
  * PARAM:	(int)		$mN 	= number of excitatory units
- * 			(double)	$des_sR	= desired spectral radius (for ESN)
+ * 			(double)	$leak	= leaking rate (leaky-integrator)
+ * 			(double)	$sR	= desired spectral radius (for ESN)
  *
  * RETURN:	class object of SORN
  *
  */
-SORN::SORN(int mN, double leak){
+ESN::ESN(int mN, double leak, double sR){
 	arma_rng::set_seed_random();
-	printf("\nASSEMBLE A SELF-ORGANIZING RECURRENT NETWORK WITH %u EXCITATORY UNITS\n\n", mN);
+	printf("\nASSEMBLE AN ECHO STATE NETWORK WITH %u UNITS\n\n", mN);
 
 	//#include "network.conf"
 
 	//Number of units
-	Ne = mN;
-	Ni = int(0.2*Ne);
-	N = Ne+Ni;
+	N = mN;
 	Nu = 10;//int(0.05*Ne);
 
 	//Random initial weights
-	w_sp = 10./Ne;
+	Wu = zeros(1,1);
+	w_sp = 5./N;
 	printf("Generating weight matrices (EE, IE, EI) with random connectivity (EE sparseness = %1.3f)...\n", w_sp);
-	sp_mat w_mat = sprandu<sp_mat>(Ne, Ne, w_sp);
+	sp_mat w_mat = sprandn<sp_mat>(N, N, w_sp);
 	W = w_mat;
-	Wie = randu<mat>(Ni, Ne);
-	Wei = randu<mat>(Ne, Ni);
 	W.diag() = zeros<vec>(W.n_rows);
-	Wie.diag() = zeros<vec>(Wie.n_rows);
-	Wei.diag() = zeros<vec>(Wei.n_cols);
-	//printf("Diagonale has norm: %f (EE), %f (IE), %f (EI)\n", norm(W.diag()), norm(Wie.diag()), norm(Wei.diag()));
 	printf("Done.\n\n");
 	printf("Index actual connections (W(i,j) > 0.)...\n");
-	idx_W = find(W>0);
+	idx_W = find(abs(W)>0);
 	printf("Found %u connections.\n", idx_W.n_elem);
-	printf("Average degree per unit = %f .\n\n", 1.0*idx_W.n_elem/Ne);
-	//printf("Computing spectral radius...\n");
-	//w_sR = max_eigenval(W);
-	//printf("sR = %4.3f\n", w_sR);
-	printf("Normalize weights row-wise...\n");
-	W = normalize(W);
-	Wei = normalize(Wei);
-	Wie = normalize(Wie);
+	printf("Average degree per unit = %f .\n\n", 1.0*idx_W.n_elem/N);
+	printf("Computing spectral radius...\n");
+	w_sR = max_eigenval(W);
+	printf("sR = %4.3f\n", w_sR);
+	W *= sR/w_sR;
+	//printf("Normalize weights row-wise...\n");
+	//W = normalize(W);
 	// Save initial weight matrix
 	init_W = W;
 	init_W.save("./results/init_W.mat", raw_ascii);
@@ -65,27 +57,23 @@ SORN::SORN(int mN, double leak){
 	//Random initial states
 	printf("Initialize states & thresholds...\n");
 	leak_rate = leak;
-	x.randu(Ne);
-	y.randu(Ni);
-	xp.randu(Ne);
-	te_max = 0.5;
-	ti_max = 1.;
-	the = te_max * randu<vec>(Ne);
-	thi = ti_max * randu<vec>(Ni);
-	printf("Leaking rate = %1.3f\nMaximum excitatory threshold = %1.3f\nMaximum inhibitory threshold = %1.3f\n", leak_rate, te_max, ti_max);
+	x.randu(N);
+	xp.randu(N);
+	b.randu(N);
+	printf("Leaking rate = %1.3f\nSpectral radius = %1.3f\n", leak_rate, sR);
 	printf("Done.\n\n");
 
 	printf("Initialize learning parameters...\n");
 
 	double tr = 0.1;//2.*(1.*Nu)/(1.*Ne);
-	target_rate = tr*ones<vec>(Ne);//(2.*Nu/Ne)*ones<vec>(Ne);
+	target_rate = tr*ones<vec>(N);//(2.*Nu/Ne)*ones<vec>(Ne);
 	mu_IP = 0.001;//0.5;
 	mu_STDP = 0.001;
 	printf("Target firing rate = %1.6f\nLearning rate STDP = %1.3f\nLearning rate IP = %1.3f\n", tr, mu_STDP, mu_IP);
 
-	STDP = true;
-	SN = true;
-	IP = true;
+	STDP = false;
+	SN = false;
+	IP = false;
 	sampling_rate = 1;
 	T_mat = int(25000/sampling_rate);
 
@@ -95,14 +83,14 @@ SORN::SORN(int mN, double leak){
 
 /*
  *
- * Destructor of the SORN class. Resets state histories and weight matrices.
+ * Destructor of the ESN class. Resets state histories and weight matrices.
  *
  * PARAM: (void)
  *
  * RETURN: (void)
  *
  */
-SORN::~SORN(){
+ESN::~ESN(){
 	Hp.reset();
 	H.reset();
 	W.reset();
@@ -118,7 +106,7 @@ SORN::~SORN(){
  * RETURN:	(double)	maximum absolute eigenvalue of $in
  *
  */
-double SORN::max_eigenval(mat & in){
+double ESN::max_eigenval(mat & in){
 	cx_colvec eigval;
 	cx_mat eigvec;
 	eig_gen (eigval, eigvec, in);
@@ -140,7 +128,7 @@ double SORN::max_eigenval(mat & in){
  * RETURN:	(mat) matrix with elements being the maximum of respective elements of $A and $B
  *
  */
-mat SORN::max_of(mat A, mat B){
+mat ESN::max_of(mat A, mat B){
 	mat out(A.n_rows,A.n_cols);
 	for(int i = 0; i < A.n_rows; i++){
 		for(int j = 0; j < A.n_cols; j++){
@@ -165,7 +153,7 @@ mat SORN::max_of(mat A, mat B){
  * RETURN:	(mat) matrix with elements being the minimum of respective elements of $A and $B
  *
  */
-mat SORN::min_of(mat A, mat B){
+mat ESN::min_of(mat A, mat B){
 	mat out(A.n_rows,A.n_cols);
 	for(int i = 0; i < A.n_rows; i++){
 		for(int j = 0; j < A.n_cols; j++){
@@ -179,7 +167,7 @@ mat SORN::min_of(mat A, mat B){
 }
 
 
-mat SORN::normalize(mat in){
+mat ESN::normalize(mat in){
 	double sum;
 	for(int i = 0; i < in.n_rows; i++){
 		sum = 0.0;
@@ -200,13 +188,13 @@ mat SORN::normalize(mat in){
  * RETURN:	(void)
  *
  */
-void SORN::save_matrices(string mode){
+void ESN::save_matrices(string mode){
 	stringstream ss;
-	ss << "./results/res_st_" << mode << ".mat";
+	ss << "./results/esn_res_st_" << mode << ".mat";
 	H.save(ss.str().c_str(), raw_ascii);
 	ss.str( string() );
 	ss.clear();
-	ss << "./results/res_pst_" << mode << ".mat";
+	ss << "./results/esn_res_pst_" << mode << ".mat";
 	Hp.save(ss.str().c_str(), raw_ascii);
 	//dH = H-Hp;
 	//ss.str( string() );
@@ -226,16 +214,16 @@ void SORN::save_matrices(string mode){
  * RETURN:	(void)
  *
  */
-void SORN::set_input_con(mat in){
+void ESN::set_input_con(mat in){
 	Nu = in.n_rows;
-	double input_conn = (1.0*Nu)/(1.*Ne*in.n_rows);
+	double input_conn = (1.0*Nu)/(1.*N*in.n_rows);
 	if(Nu < in.n_rows)
 		printf("!!! Warning: Not every input dimension is connected to the reservoir.\n");
 	if(input_conn > 0.5)
 		printf("!!! Warning: Reservoir is too input-driven. Increase reservoir size for respective input dimension.\n\n");
 	printf("Set up input connections to the reservoir with connectivity = %f\n\n", input_conn);
-	Wu = zeros<mat>(Ne, in.n_rows);
-	ivec rand_idx = randi<ivec>(Nu, distr_param(0,Ne-1));
+	Wu = zeros<mat>(N, in.n_rows);
+	ivec rand_idx = randi<ivec>(Nu, distr_param(0,N-1));
 	for(int idx_col = 0; idx_col < Nu; idx_col++){
 		if(idx_col%in.n_rows == 0 && Nu-idx_col<in.n_rows){
 			ivec rand_idx2 = randi<ivec>(Nu-idx_col, distr_param(0,in.n_rows-1));
@@ -259,66 +247,17 @@ void SORN::set_input_con(mat in){
  * RETURN:	(void)
  *
  */
-void SORN::set_matrix(int time){
+void ESN::set_matrix(int time){
 	printf("Set state history matrices...\n");
 	if(time < T_mat){
-		H.zeros(Ne, time);
-		Hp.zeros(Ne, time);
+		H.zeros(N, time);
+		Hp.zeros(N, time);
 	}
 	else{
-		H.zeros(Ne, T_mat);
-		Hp.zeros(Ne, T_mat);
+		H.zeros(N, T_mat);
+		Hp.zeros(N, T_mat);
 	}
 	printf("Done.\n\n");
-}
-
-
-/*
- *
- * Runs the plastic network for a given time interval with given input data.
- *
- * PARAM:	(mat)	$data	= input data for training run
- * 			(int)	$time	= time interval to run
- *
- * RETURN:	(void)
- *
- */
-void SORN::train(mat data, int time){
-	STDP = true;
-	SN = true;
-	IP = true;
-	printf("START TRAINING PHASE FOR %u TIMESTEPS\nSTDP = %s\nSN = %s\nIP = %s\n\n", time, STDP ? "ON" : "OFF", SN ? "ON" : "OFF", IP ? "ON" : "OFF");
-	printf("Input dim: %u x %u\n\n", data.n_rows, data.n_cols);
-	set_input_con(data);
-	set_matrix(time);
-
-	for(int t = 0; t < time; t++){
-		if(t%T_mat==0 && t != 0)
-			save_matrices("train");
-		if(t%sampling_rate==0){
-			H.col(t%T_mat) = x;
-			//Hp.col(t%T_mat) = xp;
-//		if(t%1000==0){
-//			printf("Computing spectral radius...\n");
-//			w_sR = max_eigenval(W);
-//			printf("sR = %4.3f\n", w_sR);
-//		}
-		}
-		mat dW = -W;
-		update(data.col(t%data.n_cols));
-		dW += W;
-		mean_dw += accu(abs(dW))/dW.n_elem;
-
-
-		if(t%1000==0)
-			printf("%6u ts: <dw> = %e, Input = %3.6f, X = %3.6f, W = %3.6f\n", t, mean_dw/t, accu(Wu*data.col(t%data.n_cols))/Wu.n_rows, accu(x)/x.n_elem, accu(W)/W.n_elem);
-		if(t==time-1 && t%T_mat>100)
-			save_matrices("train");
-	}
-	end_W = W;
-	end_W.save("./results/end_W.mat", raw_ascii);
-	delta_W = end_W - init_W;
-	delta_W.save("./results/delta_W.mat", raw_ascii);
 }
 
 
@@ -334,13 +273,10 @@ void SORN::train(mat data, int time){
  * RETURN:	(mat)	output matrix of states (Wout*H)
  *
  */
-mat SORN::test(mat data, mat teacher, int time, bool trainOut){
-	STDP = false;
-	SN = false;
-	IP = false;
+mat ESN::test(mat data, mat teacher, int time, bool trainOut){
 	printf("START TESTING PHASE FOR %u TIMESTEPS\n\n", time);
 
-	if(trainOut)
+	if(Wu.n_rows != N)
 		set_input_con(data);
 	set_matrix(time);
 
@@ -352,11 +288,14 @@ mat SORN::test(mat data, mat teacher, int time, bool trainOut){
 			printf("%6u ts: Input = %3.6f, X = %3.6f, W = %3.6f\n", t, accu(Wu*data.col(t%data.n_cols))/Wu.n_rows, accu(x)/x.n_elem, accu(W)/W.n_elem);
 		}
 	}
-	save_matrices("test");
+	if(trainOut)
+		save_matrices("test_out");
+	else
+		save_matrices("test");
 	No = teacher.n_rows;
 
 	if(trainOut){
-		Wout.zeros(No, Ne);
+		Wout.zeros(No, N);
 		mat shortHp = Hp;
 		mat shortH = H;
 		//	Resize state history to match teacher data (cropping the first time steps -> initLen in main.cpp)
@@ -385,7 +324,7 @@ mat SORN::test(mat data, mat teacher, int time, bool trainOut){
  * RETURN:	(void)
  *
  */
-void SORN::update(vec in){
+void ESN::update(vec in){
     vec lastx  = x;
     vec lastxp  = xp;
 
@@ -395,17 +334,16 @@ void SORN::update(vec in){
 
 	// Network activation
 	//printf("---states\n");
-	R = W * x - Wei * y - the;
+	R = W * x + b;
 	xp = sign(sign(R) + 1.);
 	xp = (1.-leak_rate)*lastxp + leak_rate*xp;
 	x = sign(sign(R + u) + 1.);
 	x = (1.-leak_rate)*lastx + leak_rate*x;		// leaky-integrated discrete-time continuous-value units
-	y = sign(sign(Wie * x - thi) + 1.);
 
     // Plasticity
     if(IP){
     	//printf("---IP\n");
-        the += mu_IP * (x-target_rate);  		// intrinsic plasticity
+        b += mu_IP * (x-target_rate);  		// intrinsic plasticity
     }
     if (STDP){
     	//printf("---STDP\n");
@@ -414,8 +352,8 @@ void SORN::update(vec in){
 		W(idx_W) += delta(idx_W);  				// additive STDP
 		//W += delta;
 
-		W = min_of(W, ones<mat>(Ne, Ne));  		// clip weights to [0,1]
-		W = max_of(W, zeros<mat>(Ne, Ne));
+		W = min_of(W, ones<mat>(N, N));  		// clip weights to [0,1]
+		W = max_of(W, zeros<mat>(N, N));
 
 		if(SN){
 			//printf("---Norm\n");
