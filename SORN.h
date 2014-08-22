@@ -17,7 +17,7 @@ using namespace arma;
 
 class SORN {
 public:
-	SORN(int mN, double leak);
+	SORN(int mN, double leak, bool opt_verbose, double mte, double mti);
 	~SORN();
 
 	double max_eigenval(mat & in);
@@ -66,6 +66,16 @@ public:
 
 	double leak_rate;	// leaking rate (1 => "nothing is leaking")
 
+
+	uvec nonzero_x;
+	double Hzero;					// number of active neurons
+	double Izero;		// number of inactive neurons
+	running_stat<double> dist;		// one-step distance
+	vec x_;
+	vec R_;
+	double pred_error;	// prediction error (1,2,4,10 time steps)
+
+
 	double mu_STDP;		// learning rate STDP
 	double mu_IP;		// learning rate IP
 	vec target_rate;	// target rate for IP
@@ -74,6 +84,7 @@ public:
 	bool IP;			// Boolean (if STDP is on)
 	int T_mat;			// maximum time interval saved in matrices
 	int sampling_rate;	// for matrices
+	bool VERBOSE;
 
 	Timer * test_timer;
 };

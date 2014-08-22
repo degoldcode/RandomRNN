@@ -49,26 +49,26 @@ set xlabel "Time {/Helvetica-Oblique t} [ts]"
 set ylabel "Unit index"
 set cblabel "State"
 
-set output "../plots/input.eps"
-plot "../results/my_data.mat" matrix with image
-set output "../plots/inputtest.eps"
-plot "../results/my_data_test.mat" matrix with image
+#set output "../plots/input.eps"
+#plot "../results/my_data.mat" matrix with image
+#set output "../plots/inputtest.eps"
+#plot "../results/my_data_test.mat" matrix with image
 
 
-rows = "`cat ../results/my_out.mat | wc -l`"
-columns = "`head ../results/my_out.mat -n1 | wc -w`"
-set xrange [-0.5+START:columns-0.5]
-set yrange [-0.5:rows-0.5]
+#rows = "`cat ../results/my_out.mat | wc -l`"
+#columns = "`head ../results/my_out.mat -n1 | wc -w`"
+#set xrange [-0.5+START:columns-0.5]
+#set yrange [-0.5:rows-0.5]
 
-set output "../plots/output.eps"
-plot "../results/my_out.mat" matrix with image
+#set output "../plots/output.eps"
+#plot "../results/my_out.mat" matrix with image
 set output "../plots/outputtest.eps"
-plot "../results/my_out_test.mat" matrix with image
+#plot "../results/my_out_test.mat" matrix with image
 set output "../plots/teacher.eps"
-plot "../results/my_teacher.mat" matrix with image
+#plot "../results/my_teacher.mat" matrix with image
 set cbrange []
 #set xtics out
 set palette gray negative
 #set xtics 250,500,5500
 set output "../plots/dout.eps"
-plot "../results/dout.mat" matrix with image
+#plot "../results/dout.mat" matrix with image

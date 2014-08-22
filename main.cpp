@@ -15,17 +15,19 @@
 using namespace std;
 using namespace arma;
 
-const int trainLen = 10;				// time interval for training (in ts)
+const int trainLen = 10000;				// time interval for training (in ts)
 const int testLen = 5000;				// time interval for testing (in ts)
 const int initLen = 0;					// time interval for initiating (in ts)
-const int missingLen = 0;				// time interval of missing data (in ts)
+const int missingLen = 1;				// time interval of missing data (in ts)
 const int numGestures = 11;				// number of gestures
 const int gesture_len = 500;			// time length of each gesture
-const int numTrials = 1;
+const int numTrials = 50;
+const int numParam1 = 3;
+const int numParam2 = 5;
 
 const int inSize = 1; 				// Number of input neurons (input dim)
 const int outSize = 1;				// Number of input neurons (input dim)
-const int resSize = 200;				// Number of reservoir neurons (resSize = 0.8*Ne + 0.2*Ni)
+const int resSize = 100;				// Number of reservoir neurons (resSize = 0.8*Ne + 0.2*Ni)
 const double a = 1.0; 					// leaking rate
 const double sR = 0.95; 					// spectral radius
 
@@ -38,15 +40,21 @@ mat my_datat;							// input for training
 mat my_data_test;						// input for testing
 mat my_data_testt;						// input for testing
 mat my_teacher;							// teacher for readout training
+mat my_teachert;						// teacher for readout training
 mat my_output;
 mat my_outputt;
 mat my_output_test;
 mat my_output_testt;
 
+running_stat<double> Hzero;
+running_stat<double> Izero;
+running_stat<double> dist;
+running_stat<double> perform;
+
 // if data needs to be written to file
 ofstream my_write;
 
-enum{sine,sin2cos,sqrf};
+enum{sine,sin2cos,sqrf,code};
 
 void load_data(string file){
 	// load input data
@@ -77,6 +85,19 @@ void load_data(int opt){
 			my_data(0, tstep) = sin((4*M_PI/500)*tstep)*cos((2*M_PI/500)*tstep);
 		if(opt == sqrf)
 			my_data(0, tstep) = sin((2*M_PI/500)*tstep);
+	}
+	if(opt == code){
+		my_data = zeros(1,10);
+		my_data(0,0) = 1.;
+		my_data(0,1) = 0.;
+		my_data(0,2) = 0.;
+		my_data(0,3) = 1.;
+		my_data(0,4) = 1.;
+		my_data(0,5) = 0.;
+		my_data(0,6) = 1.;
+		my_data(0,7) = 0.;
+		my_data(0,8) = 1.;
+		my_data(0,9) = 1.;
 	}
 	if(opt == sqrf){
 		my_data = 0.5*(sign(my_data) + 1.0);
@@ -124,9 +145,16 @@ void load_teacher(mat in, int numgestures, int len){
 	my_teacher.save("./results/my_teacher.mat", raw_ascii);
 }
 
+void load_teacher(mat in, int delay){
+	my_teacher = join_rows(in.cols(delay,in.n_cols-1),in.cols(0,delay-1));
+	my_teachert = my_teacher.t();
+	my_teachert.save("./results/my_teacher.mat", raw_ascii);
+}
+
 int main(){
 	// create timer to measure runtime of your simulation
 	Timer timer(true);
+	my_write.open("./results/all_values.dat");
 
 	// loading input
 	load_data(sqrf);
@@ -134,21 +162,54 @@ int main(){
 	// loading input w/ missing time steps
 	load_test_data(missingLen/*ts*/, true/*true=RANDOM NOISE; false=ZEROS*/, false);
 	// loading teacher data
-	load_teacher(my_data, 3, testLen);
+	load_teacher(my_data, 1);
 
-	for(int trialIdx = 0; trialIdx < numTrials; trialIdx++){
-		// create SORN
-		//my_sorn = new SORN(resSize, a);
-		my_esn = new ESN(resSize, a, sR);
+	for(int param1 = 0; param1 < numParam1; param1++){
+		double Temax = param1*0.25 + 0.25;
+		for(int param2 = 0; param2 < numParam2; param2++){
+			double Timax = param2*0.2 + 0.6;
+			printf("Te = %f, Ti = %f\n\n", Temax, Timax);
+			for(int trialIdx = 0; trialIdx < numTrials; trialIdx++){
+				// create SORN
+				my_sorn = new SORN(resSize, a, (numTrials>1)?false:true, Temax, Timax);
+				//my_esn = new ESN(resSize, a, sR);
 
-		// plastic network
-		//my_sorn->train(my_data, trainLen);
-		// static network with readout training
-		my_output = my_esn->test(my_data, my_data, testLen, true);
-		my_outputt = my_output.t();
-		// testing static network with independent data (missing ts)
-		my_output_test = my_esn->test(my_data_test, my_data, testLen, false);
-		my_output_testt = my_output_test.t();
+				// plastic network
+				my_sorn->train(my_data, trainLen);
+				// static network with readout training
+				my_output = my_sorn->test(my_data, my_teacher, testLen, true);
+				my_outputt = my_output.t();
+				Hzero(my_sorn->Hzero);
+				Izero(my_sorn->Izero);
+				dist(my_sorn->dist.mean());
+
+
+				// testing static network with independent data (missing ts)
+				my_output_test = my_sorn->test(my_data_test, my_teacher, testLen, false);
+				my_output_testt = my_output_test.t();
+				perform(my_sorn->pred_error);
+				if(trialIdx%(numTrials/10)==0 && numTrials>=10)
+					printf("\nTrial = %2u\tH0 = %f +- %f\tI0 = %f +- %f\tdist = %f +- %f\tNRMSE = %f +- %f\n\n", trialIdx+1, Hzero.mean(), Hzero.stddev(), Izero.mean(), Izero.stddev(), dist.mean(), dist.stddev(), perform.mean(), perform.stddev());
+				if(numTrials<10)
+					printf("\nTrial = %2u\tH0 = %f +- %f\tI0 = %f +- %f\tdist = %f +- %f\tNRMSE = %f +- %f\n\n", trialIdx+1, Hzero.mean(), Hzero.stddev(), Izero.mean(), Izero.stddev(), dist.mean(), dist.stddev(), perform.mean(), perform.stddev());
+				// delete SORN
+				delete my_sorn;
+			}
+			my_write.width(8);
+			my_write.precision(6);
+			my_write.setf( std::ios::fixed, std:: ios::floatfield );
+			my_write 	<< Temax << "\t"					// 1
+						<< Timax << "\t"
+						<< Hzero.mean() << "\t"
+						<< Hzero.stddev() << "\t"
+						<< Izero.mean() << "\t"			// 5
+						<< Izero.stddev() << "\t"
+						<< dist.mean() << "\t"
+						<< dist.stddev() << "\t"
+						<< perform.mean() << "\t"
+						<< perform.stddev() << "\t"		// 10
+						<< endl;
+		}
 	}
 
 	// save outputs
@@ -157,9 +218,7 @@ int main(){
 	mat dout = (my_output_testt-my_outputt);
 	dout.save("./results/dout.mat", raw_ascii);
 
-	// delete SORN
-	delete my_sorn;
-
+	my_write.close();
 	// timer prints runtime
 	auto elapsed_secs = timer.Elapsed();
 	printf("Executed. Runtime = %4.3f s.\n", elapsed_secs.count()/1000.);
